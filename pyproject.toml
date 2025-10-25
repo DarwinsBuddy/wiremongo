@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "wiremongo"
+version = "0.1.0"
+description = "A test library to mock MongoDB commands with AsyncMongoClient compatibility"
+authors = ["Christoph Spörk <christoph.spoerk@gmail.com>"]
+readme = "README.md"
+packages = [{include = "wiremongo"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pymongo = "^4.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-asyncio = "^0.21.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

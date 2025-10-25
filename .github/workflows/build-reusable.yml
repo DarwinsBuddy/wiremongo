@@ -1,0 +1,52 @@
+name: Build Package
+
+on:
+  workflow_call:
+    inputs:
+      upload_package:
+        description: 'Whether to upload the package as artifact'
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      package_path:
+        description: 'Path to the built wheel package'
+        value: ${{ jobs.build.outputs.package_path }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      package_path: ${{ steps.build_info.outputs.package_path }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+    
+    - name: Install dependencies
+      run: poetry install --with dev
+
+    - name: Run tests
+      run: poetry run pytest
+    
+    - name: Build package
+      run: poetry build
+    
+    - name: Get package info
+      id: build_info
+      run: echo "package_path=$(ls dist/*.whl)" >> $GITHUB_OUTPUT
+
+    - name: Upload package
+      if: ${{ inputs.upload_package }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-package
+        path: ${{ steps.build_info.outputs.package_path }}
+    

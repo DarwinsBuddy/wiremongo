@@ -1,0 +1,13 @@
+name: Build
+
+on:
+  push:
+    tags-ignore:
+      - '**'
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-reusable.yml
