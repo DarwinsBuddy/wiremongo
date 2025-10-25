@@ -414,3 +414,5 @@ async def test_reset_functionality(wiremongo: WireMongo):
     with pytest.raises(AssertionError):
         async for _ in wiremongo.client["testdb"]["users"].find({}):
             pass
+
+

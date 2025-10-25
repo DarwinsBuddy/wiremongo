@@ -17,9 +17,9 @@ def from_filemapping[T: MongoMock](mapping: Mapping[str, Any]) -> T:
     mock = cls()
     for method, arguments in mapping.items():
         if method.startswith("with_") or method.startswith("returns"):
-            if isinstance(arguments, dict):
-                args = arguments["args"]
-                kwargs = arguments["kwargs"]
+            if isinstance(arguments, dict) and "args" in arguments:
+                args = arguments.get("args", [])
+                kwargs = arguments.get("kwargs", {})
             else:
                 args = arguments if isinstance(arguments, list) else [arguments]
                 kwargs = dict()
