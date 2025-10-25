@@ -9,6 +9,7 @@ jobs:
     uses: ./.github/workflows/build-reusable.yml
     with:
       upload_package: true
+    secrets: inherit
 
   publish:
     needs: build

@@ -8,6 +8,7 @@ on:
         required: false
         default: false
         type: boolean
+
     outputs:
       package_path:
         description: 'Path to the built wheel package'
@@ -34,8 +35,15 @@ jobs:
       run: poetry install --with dev
 
     - name: Run tests
-      run: poetry run pytest
+      run: poetry run pytest --cov=wiremongo --cov-report=xml
     
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: ./coverage.xml
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
     - name: Build package
       run: poetry build
     

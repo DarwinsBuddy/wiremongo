@@ -1,4 +1,5 @@
 # wiremongo
+[![codecov](https://codecov.io/gh/DarwinsBuddy/wiremongo/graph/badge.svg?token=15N2JS4DJM)](https://codecov.io/gh/DarwinsBuddy/wiremongo)
 
 A lightweight test library for mocking MongoDB operations with AsyncMongoClient compatibility. Designed for creating integrated tests without requiring a real MongoDB instance.
 
