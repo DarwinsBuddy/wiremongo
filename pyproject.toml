@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wiremongo"
-version = "0.1.0"
+version = "0.1.1"
 description = "A test library to mock MongoDB commands with AsyncMongoClient compatibility"
 authors = ["Christoph Spörk <christoph.spoerk@gmail.com>"]
 readme = "README.md"
