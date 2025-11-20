@@ -21,7 +21,7 @@ def from_filemapping[T: MongoMock](mapping: Mapping[str, Any]) -> T:
                 args = arguments.get("args", [])
                 kwargs = arguments.get("kwargs", {})
             else:
-                args = arguments if isinstance(arguments, list) else [arguments]
+                args = list(arguments) if isinstance(arguments, list) or isinstance(arguments, tuple) else [arguments]
                 kwargs = dict()
             call_base_class_methods(cls, method, mock, *args, exclude_self=False, **kwargs)
     return mock
@@ -215,6 +215,9 @@ class MongoMock:
             raise self.result
         return self.result
 
+    def __repr__(self):
+        return f"{self.operation.capitalize()}Mock(database={self.database}, collection={self.collection}, query={self.query}, kwargs={self.kwargs})"
+
 
 class FindMock(MongoMock):
     def __init__(self):
@@ -229,6 +232,9 @@ class FindMock(MongoMock):
         result = super().get_result()
         return AsyncCursor(result if result is not None else [])
 
+    def __repr__(self):
+        return f"FindMock(query={self.query}, kwargs={self.kwargs})"
+
 
 class FindOneMock(MongoMock):
     def __init__(self):
@@ -238,6 +244,9 @@ class FindOneMock(MongoMock):
         self.query = query
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"FindOneMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class InsertOneMock(MongoMock):
@@ -249,6 +258,9 @@ class InsertOneMock(MongoMock):
         self.kwargs = kwargs
         return self
 
+    def __repr__(self):
+        return f"InsertOneMock(query={self.query}, kwargs={self.kwargs})"
+
 
 class InsertManyMock(MongoMock):
     def __init__(self):
@@ -258,6 +270,9 @@ class InsertManyMock(MongoMock):
         self.query = documents
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"InsertManyMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class FindOneAndUpdateMock(MongoMock):
@@ -269,6 +284,9 @@ class FindOneAndUpdateMock(MongoMock):
         self.kwargs = kwargs
         return self
 
+    def __repr__(self):
+        return f"FindOneAndUpdateMock(query={self.query}, kwargs={self.kwargs})"
+
 class UpdateOneMock(MongoMock):
     def __init__(self):
         super().__init__("update_one")
@@ -277,6 +295,9 @@ class UpdateOneMock(MongoMock):
         self.query = (filter, update)
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"UpdateOneMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class UpdateManyMock(MongoMock):
@@ -288,6 +309,9 @@ class UpdateManyMock(MongoMock):
         self.kwargs = kwargs
         return self
 
+    def __repr__(self):
+        return f"UpdateManyMock(query={self.query}, kwargs={self.kwargs})"
+
 
 class DeleteOneMock(MongoMock):
     def __init__(self):
@@ -297,6 +321,9 @@ class DeleteOneMock(MongoMock):
         self.query = filter
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"DeleteOneMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class DeleteManyMock(MongoMock):
@@ -308,6 +335,8 @@ class DeleteManyMock(MongoMock):
         self.kwargs = kwargs
         return self
 
+    def __repr__(self):
+        return f"DeleteManyMock(query={self.query}, kwargs={self.kwargs})"
 
 class CountDocumentsMock(MongoMock):
     def __init__(self):
@@ -317,6 +346,9 @@ class CountDocumentsMock(MongoMock):
         self.query = filter
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"CountDocumentsMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class AggregateMock(MongoMock):
@@ -332,6 +364,9 @@ class AggregateMock(MongoMock):
         result = super().get_result()
         return AsyncCursor(result if result is not None else [])
 
+    def __repr__(self):
+        return f"AggregateMock(query={self.query}, kwargs={self.kwargs})"
+
 
 class DistinctMock(MongoMock):
     def __init__(self):
@@ -341,6 +376,9 @@ class DistinctMock(MongoMock):
         self.query = (key, filter)
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"DistinctMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class BulkWriteMock(MongoMock):
@@ -352,15 +390,21 @@ class BulkWriteMock(MongoMock):
         self.kwargs = kwargs
         return self
 
+    def __repr__(self):
+        return f"BulkWriteMock(query={self.query}, kwargs={self.kwargs})"
+
 
 class CreateIndexMock(MongoMock):
     def __init__(self):
         super().__init__("create_index")
 
-    def with_keys(self, keys: Union[str, list[tuple], dict], **kwargs) -> "CreateIndexMock":
+    def with_keys(self, keys: Union[str, dict, list[tuple], tuple[tuple]], **kwargs) -> "CreateIndexMock":
         self.query = keys
         self.kwargs = kwargs
         return self
+
+    def __repr__(self):
+        return f"CreateIndexMock(query={self.query}, kwargs={self.kwargs})"
 
 
 class WireMongo:
@@ -388,8 +432,8 @@ class WireMongo:
 
             for operation in operations:
 
-                def create_default_handler(op=operation):
-                    raise AssertionError(f"No matching mock found for {op}")
+                def create_default_handler(op=operation, *args, **kwargs):
+                    raise AssertionError(f"No matching mock found for {op} args={args} kwargs={kwargs} - Candidates are {self.mocks}")
 
                 key = (db, coll, operation)
                 if key not in self._original_methods:
@@ -412,7 +456,7 @@ class WireMongo:
                     # Sort mocks by priority to use highest priority match
                     matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
                     if not matching_mocks:
-                        raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs}")
+                        raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
 
                     # Use the highest priority mock
                     idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)

@@ -1,5 +1,5 @@
 import pytest
-from wiremongo import from_filemapping, FindOneMock, InsertOneMock, UpdateOneMock
+from wiremongo import from_filemapping, FindOneMock, InsertOneMock, UpdateOneMock, CreateIndexMock
 
 
 def test_from_filemapping_find_one():
@@ -86,3 +86,24 @@ def test_from_filemapping_list_args():
     mock = from_filemapping(mapping)
     assert isinstance(mock, FindOneMock)
     assert mock.query == {"_id": "123"}
+
+
+def test_from_filemapping_list_args_create_index():
+    """Test file mapping with list arguments"""
+    mapping = {
+        "cmd": "create_index",
+        "with_database": "test_db",
+        "with_collection": "users",
+        "with_keys": {
+            "user_id": 1,
+            "name": 1
+        },
+        "returns": None
+    }
+
+    mock = from_filemapping(mapping)
+    assert isinstance(mock, CreateIndexMock)
+    assert mock.query == {
+        "user_id": 1,
+        "name": 1
+    }

@@ -11,7 +11,7 @@ from wiremongo import (
     WireMongo, FindMock, FindOneMock, InsertOneMock, InsertManyMock,
     UpdateOneMock, UpdateManyMock, DeleteOneMock, DeleteManyMock,
     CountDocumentsMock, AggregateMock, DistinctMock, BulkWriteMock,
-    CreateIndexMock
+    CreateIndexMock, from_filemapping
 )
 
 
@@ -297,6 +297,32 @@ async def test_create_index(wiremongo: WireMongo):
         unique=True
     )
     assert index_name == "name_1_age_-1"
+
+@pytest.mark.asyncio
+async def test_create_index_with_filemapping(wiremongo: WireMongo):
+    mapping = {
+        "cmd": "create_index",
+        "with_database": "test_db",
+        "with_collection": "users",
+        "with_keys": {
+            "args": ["user_id"],
+            "kwargs": {
+                "expireAfterSeconds": 300
+            }
+        },
+        "returns": "user_id_1"
+    }
+
+    mock = from_filemapping(mapping)
+
+    wiremongo.mock(mock)
+    wiremongo.build()
+
+    index_name = await wiremongo.client["testdb"]["users"].create_index(
+        "user_id",
+        expireAfterSeconds=300
+    )
+    assert index_name == "user_id_1"
 
 @pytest.mark.asyncio
 async def test_bulk_write(wiremongo: WireMongo):
