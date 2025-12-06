@@ -7,8 +7,9 @@ from pymongo.errors import DuplicateKeyError
 
 ASYNC_DATABASE_OPERATIONS = ["command", "create_collection", "drop_collection"]
 ASYNC_COLLECTION_OPERATIONS = ["find_one", "find_one_and_update", "insert_one", "insert_many", "update_one", "update_many", "delete_one", "delete_many", "count_documents", "distinct", "create_index", "bulk_write", "drop", "drop_indexes"]
-ASYNC_CURSOR_COLLECTION_OPERATIONS = ["find", "aggregate"]
-ALL_SUPPORTED_OPERATIONS = ASYNC_COLLECTION_OPERATIONS + ASYNC_CURSOR_COLLECTION_OPERATIONS + ASYNC_DATABASE_OPERATIONS
+ASYNC_CURSOR_COLLECTION_OPERATIONS = ["find"]
+ASYNC_COROUTINE_CURSOR_OPERATIONS = ["aggregate"]
+ALL_SUPPORTED_OPERATIONS = ASYNC_COLLECTION_OPERATIONS + ASYNC_CURSOR_COLLECTION_OPERATIONS + ASYNC_COROUTINE_CURSOR_OPERATIONS + ASYNC_DATABASE_OPERATIONS
 
 def from_filemapping[T: MongoMock](mapping: Mapping[str, Any]) -> T:
     cls = globals().get(f"{''.join(word.capitalize() for word in mapping['cmd'].split('_'))}Mock")
@@ -98,6 +99,9 @@ class MockCollection(MagicMock):
             setattr(self, method, AsyncMock(side_effect=async_partial(default_cursor_method)))
 
         for method in ASYNC_CURSOR_COLLECTION_OPERATIONS:
+            setattr(self, method, default_cursor_method)
+
+        for method in ASYNC_COROUTINE_CURSOR_OPERATIONS:
             setattr(self, method, default_cursor_method)
 
 
@@ -360,7 +364,7 @@ class AggregateMock(MongoMock):
         self.kwargs = kwargs
         return self
 
-    def get_result(self):
+    async def get_result(self):
         result = super().get_result()
         return AsyncCursor(result if result is not None else [])
 
@@ -441,6 +445,11 @@ class WireMongo:
 
                     if operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:
                         new_mock = default_handler = create_default_handler
+                    elif operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
+                        async def async_default_handler(*args, **kwargs):
+                            raise AssertionError(f"No matching mock found for {operation} args={args} kwargs={kwargs} - Candidates are {self.mocks}")
+                        default_handler = async_default_handler
+                        new_mock = AsyncMock(side_effect=default_handler)
                     else:
                         default_handler = async_partial(create_default_handler)
                         new_mock = AsyncMock(side_effect=default_handler)
@@ -452,17 +461,22 @@ class WireMongo:
             collection = self.client[mock.database][mock.collection]
 
             def create_handler(operation: str, mock_list: list[MongoMock]):
-                def handler(*args, **kwargs):
-                    # Sort mocks by priority to use highest priority match
-                    matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
-                    if not matching_mocks:
-                        raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
-
-                    # Use the highest priority mock
-                    idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)
-                    return mock.get_result()
-
-                return handler
+                if operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
+                    async def handler(*args, **kwargs):
+                        matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
+                        if not matching_mocks:
+                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
+                        idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)
+                        return await mock.get_result()
+                    return handler
+                else:
+                    def handler(*args, **kwargs):
+                        matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
+                        if not matching_mocks:
+                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
+                        idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)
+                        return mock.get_result()
+                    return handler
 
             # Store original method if not already stored
             key = (mock.database, mock.collection, mock.operation)
@@ -470,17 +484,22 @@ class WireMongo:
                 self._original_methods[key] = getattr(collection, mock.operation, None)
                 # Store default handler
                 if mock.operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:
-
                     def default_handler(*args, **kwargs):
                         raise AssertionError(f"No matching mock found for {mock.operation}")
-
+                    self._default_handlers[key] = default_handler
+                elif mock.operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
+                    async def default_handler(*args, **kwargs):
+                        raise AssertionError(f"No matching mock found for {mock.operation}")
                     self._default_handlers[key] = default_handler
 
             # Create new mock with the handler
-            if mock.operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:
-                new_mock = create_handler(mock.operation, self.mocks)
+            handler = create_handler(mock.operation, self.mocks)
+            if mock.operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
+                new_mock = AsyncMock(side_effect=handler)
+            elif mock.operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:
+                new_mock = handler
             else:
-                new_mock = AsyncMock(side_effect=async_partial(create_handler(mock.operation, self.mocks)))
+                new_mock = AsyncMock(side_effect=async_partial(handler))
             setattr(collection, mock.operation, new_mock)
 
     def reset(self):
@@ -491,8 +510,9 @@ class WireMongo:
             if method is not None:
                 collection = self.client[db][coll]
                 if op in ASYNC_CURSOR_COLLECTION_OPERATIONS:
-                    # Restore default handler that raises AssertionError
                     new_mock = self._default_handlers[key]
+                elif op in ASYNC_COROUTINE_CURSOR_OPERATIONS:
+                    new_mock = AsyncMock(side_effect=self._default_handlers[key])
                 else:
                     new_mock = AsyncMock(side_effect=async_partial(self._default_handlers[key]))
                 setattr(collection, op, new_mock)

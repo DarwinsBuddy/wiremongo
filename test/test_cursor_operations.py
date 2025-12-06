@@ -90,7 +90,7 @@ async def test_aggregate_mock_returns_cursor():
     mock = AggregateMock()
     mock.result = [{"_id": "NYC", "count": 5}]
     
-    cursor = mock.get_result()
+    cursor = await mock.get_result()
     assert hasattr(cursor, '__aiter__')
     
     results = []
@@ -107,6 +107,6 @@ async def test_aggregate_mock_returns_cursor_with_none_result():
     mock = AggregateMock()
     mock.result = None
     
-    cursor = mock.get_result()
+    cursor = await mock.get_result()
     results = await cursor.to_list()
     assert results == []

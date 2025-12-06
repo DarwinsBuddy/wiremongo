@@ -257,7 +257,7 @@ async def test_aggregate_operation(wiremongo: WireMongo):
     wiremongo.build()
 
     results = []
-    async for doc in wiremongo.client["testdb"]["users"].aggregate(pipeline):
+    async for doc in await wiremongo.client["testdb"]["users"].aggregate(pipeline):
         results.append(doc)
     assert results == expected_results
 
