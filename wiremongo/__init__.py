@@ -105,42 +105,40 @@ class MockCollection(MagicMock):
             setattr(self, method, default_cursor_method)
 
 
-class MockDatabase(MagicMock):
+class MockDatabase:
     """Mock database that returns MockCollection instances"""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.name = kwargs.get("name", "mock_db")
+        self._collections = {}
 
         # Make common database operations async
         for method in ASYNC_DATABASE_OPERATIONS:
             setattr(self, method, AsyncMock(return_value=None))
 
     def __getitem__(self, name):
-        if not hasattr(self, f"_mock_collection_{name}"):
-            setattr(self, f"_mock_collection_{name}", MockCollection(name=name))
-        return getattr(self, f"_mock_collection_{name}")
+        if name not in self._collections:
+            self._collections[name] = MockCollection(name=name)
+        return self._collections[name]
 
     def get_collection(self, name, *args, **kwargs):
         return self[name]
 
 
-class MockClient(MagicMock):
+class MockClient:
     """Mock client that mimics pymongo.AsyncMongoClient"""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__class__ = type("MockAsyncMongoClient", (MagicMock,), {"__class__": AsyncMongoClient, "__await__": lambda self: self._get_awaitable().__await__()})
-
+        self._databases = {}
         # Make common client operations async
-        async_methods = ["close", "server_info", "list_databases"]
-        for method in async_methods:
-            setattr(self, method, AsyncMock(return_value=None))
+        self.close = AsyncMock(return_value=None)
+        self.server_info = AsyncMock(return_value=None)
+        self.list_databases = AsyncMock(return_value=None)
 
     def __getitem__(self, name):
-        if not hasattr(self, f"_mock_database_{name}"):
-            setattr(self, f"_mock_database_{name}", MockDatabase(name=name))
-        return getattr(self, f"_mock_database_{name}")
+        if name not in self._databases:
+            self._databases[name] = MockDatabase(name=name)
+        return self._databases[name]
 
     def get_database(self, name, *args, **kwargs):
         return self[name]
@@ -456,44 +454,38 @@ class WireMongo:
                     self._default_handlers[key] = default_handler
                     setattr(collection, operation, new_mock)
 
-        # Set up specific mock handlers
+        # Set up specific mock handlers - one per (database, collection, operation)
+        handled_operations = set()
         for mock in self.mocks:
+            key = (mock.database, mock.collection, mock.operation)
+            if key in handled_operations:
+                continue
+            handled_operations.add(key)
+            
             collection = self.client[mock.database][mock.collection]
 
-            def create_handler(operation: str, mock_list: list[MongoMock]):
+            def create_handler(operation: str, database: str, collection_name: str):
                 if operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
                     async def handler(*args, **kwargs):
-                        matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
+                        candidates = [m for m in self.mocks if m.operation == operation and m.database == database and m.collection == collection_name]
+                        matching_mocks = [(i, m) for i, m in enumerate(candidates) if m.matches(*args, **kwargs)]
                         if not matching_mocks:
-                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
+                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {candidates}")
                         idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)
                         return await mock.get_result()
                     return handler
                 else:
                     def handler(*args, **kwargs):
-                        matching_mocks = [(i, m) for i, m in enumerate(mock_list) if m.operation == operation and m.matches(*args, **kwargs)]
+                        candidates = [m for m in self.mocks if m.operation == operation and m.database == database and m.collection == collection_name]
+                        matching_mocks = [(i, m) for i, m in enumerate(candidates) if m.matches(*args, **kwargs)]
                         if not matching_mocks:
-                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {self.mocks}")
+                            raise AssertionError(f"No matching mock found for {operation}: args={args}, kwargs={kwargs} - Candidates are {candidates}")
                         idx, mock = max(matching_mocks, key=lambda x: x[1]._priority)
                         return mock.get_result()
                     return handler
 
-            # Store original method if not already stored
-            key = (mock.database, mock.collection, mock.operation)
-            if key not in self._original_methods:
-                self._original_methods[key] = getattr(collection, mock.operation, None)
-                # Store default handler
-                if mock.operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:
-                    def default_handler(*args, **kwargs):
-                        raise AssertionError(f"No matching mock found for {mock.operation}")
-                    self._default_handlers[key] = default_handler
-                elif mock.operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
-                    async def default_handler(*args, **kwargs):
-                        raise AssertionError(f"No matching mock found for {mock.operation}")
-                    self._default_handlers[key] = default_handler
-
             # Create new mock with the handler
-            handler = create_handler(mock.operation, self.mocks)
+            handler = create_handler(mock.operation, mock.database, mock.collection)
             if mock.operation in ASYNC_COROUTINE_CURSOR_OPERATIONS:
                 new_mock = AsyncMock(side_effect=handler)
             elif mock.operation in ASYNC_CURSOR_COLLECTION_OPERATIONS:

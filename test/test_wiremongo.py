@@ -318,7 +318,7 @@ async def test_create_index_with_filemapping(wiremongo: WireMongo):
     wiremongo.mock(mock)
     wiremongo.build()
 
-    index_name = await wiremongo.client["testdb"]["users"].create_index(
+    index_name = await wiremongo.client["test_db"]["users"].create_index(
         "user_id",
         expireAfterSeconds=300
     )
