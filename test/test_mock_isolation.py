@@ -15,10 +15,20 @@ async def test_mock_isolation_different_operations(wiremongo: WireMongo):
     # Mock for find_one
     wiremongo.mock(
         FindOneMock()
-        .with_database("testdb")
+        .with_database("testdb1")
         .with_collection("users")
         .with_query({"name": "John"})
-        .returns({"_id": "1", "name": "John"})
+        .returns({"_id": "1", "name": "John"}),
+        FindOneMock()
+        .with_database("testdb2")
+        .with_collection("users")
+        .with_query({"name": "Jack"})
+        .returns({"_id": "2", "name": "Jack"}),
+        FindOneMock()
+        .with_database("testdb1")
+        .with_collection("users2")
+        .with_query({"name": "Jane"})
+        .returns({"_id": "3", "name": "Jane"})
     )
     
     # Mock for insert_one with same query pattern
@@ -33,9 +43,13 @@ async def test_mock_isolation_different_operations(wiremongo: WireMongo):
     wiremongo.build()
     
     # Both operations should work independently
-    result = await wiremongo.client["testdb"]["users"].find_one({"name": "John"})
+    result = await wiremongo.client["testdb1"]["users"].find_one({"name": "John"})
     assert result["name"] == "John"
-    
+    result = await wiremongo.client["testdb2"]["users"].find_one({"name": "Jack"})
+    assert result["name"] == "Jack"
+    result = await wiremongo.client["testdb1"]["users2"].find_one({"name": "Jane"})
+    assert result["name"] == "Jane"
+
     result = await wiremongo.client["testdb"]["users"].insert_one({"name": "John"})
     assert result["inserted_id"] == "2"
 

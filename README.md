@@ -64,6 +64,32 @@ Create JSON mapping files in `tests/resources/mappings/`:
 - **Database Operations**: command, create_collection, drop_collection
 - **Cursor Operations**: find, aggregate with async iteration support
 
+## Debugging
+
+If you are unsure about the set up mocks in your setup, you can always print the generated mocks like this:
+```python
+import json
+
+# Get a structured dictionary of active mocks
+active_mocks = wiremongo.get_active_mocks()
+
+# Print them in a readable format
+print(json.dumps(active_mocks, indent=4))
+```
+If you are unsure which candidates are picked with your call, checkout this function:
+```python
+import json
+# Check which mocks would be considered for this specific call
+report = wiremongo.find_candidates(
+    database="users_db",
+    collection="profiles",
+    operation="find_one",
+    query={"id": 2}  # The arguments you are actually passing in your code
+)
+
+print(json.dumps(report, indent=4))
+```
+
 ## Development
 
 ```bash
